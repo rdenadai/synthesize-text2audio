@@ -12,13 +12,9 @@
       <div class="card">
         <div class="row">
           <h1>Sintetizador de Texto para Áudio</h1>
-          <button id="theme-toggle" class="theme-toggle" title="Mudar tema">
-            🌙
-          </button>
+          <button id="theme-toggle" class="theme-toggle" title="Mudar tema">🌙</button>
         </div>
-        <p class="muted">
-          Cole um texto, insira uma URL ou escolha uma voz para gerar o áudio.
-        </p>
+        <p class="muted">Cole um texto, insira uma URL ou escolha uma voz para gerar o áudio.</p>
         <form id="synthesize-form">
           <div class="row-container">
             <div class="row-container">
@@ -33,30 +29,17 @@
 
             <div class="row-container">
               <label for="url">Ou insira uma URL:</label>
-              <input
-                type="text"
-                id="url"
-                name="url"
-                placeholder="https://exemplo.com/artigo"
-              />
+              <input type="text" id="url" name="url" placeholder="https://exemplo.com/artigo" />
             </div>
 
             <div class="row-container">
               <label for="voice">Escolha uma voz:</label>
               <select id="voice" name="voice">
                 <optgroup label="Português">
-                  <option value="v2/pt_speaker_0" selected>
-                    Português - Masculino 1
-                  </option>
-                  <option value="v2/pt_speaker_1">
-                    Português - Masculino 2
-                  </option>
-                  <option value="v2/pt_speaker_2">
-                    Português - Masculino 3
-                  </option>
-                  <option value="v2/pt_speaker_3">
-                    Português - Masculino 4
-                  </option>
+                  <option value="v2/pt_speaker_0" selected>Português - Masculino 1</option>
+                  <option value="v2/pt_speaker_1">Português - Masculino 2</option>
+                  <option value="v2/pt_speaker_2">Português - Masculino 3</option>
+                  <option value="v2/pt_speaker_3">Português - Masculino 4</option>
                 </optgroup>
                 <optgroup label="Inglês">
                   <option value="v2/en_speaker_0">Inglês - Masculino 1</option>
@@ -68,13 +51,7 @@
             </div>
 
             <div class="row-container center" style="padding-top: 1em">
-              <button
-                type="submit"
-                id="submit-button"
-                style="width: 25em; font-size: 1.25em; color: white"
-              >
-                Sintetizar
-              </button>
+              <button type="submit" id="submit-button" class="primary-btn">Sintetizar</button>
             </div>
           </div>
         </form>
@@ -84,30 +61,61 @@
 
       <div class="card">
         <div id="result-container">
-          <p class="small">
-            Nenhum áudio gerado ainda. Envie um texto para começar.
-          </p>
+          <p id="message-content" class="small">Nenhum áudio gerado ainda. Envie um texto para começar.</p>
+          <div id="audio-content" style="display: none">
+            <p id="time-taken-content"></p>
+            <div style="display: flex; justify-content: center; align-items: center; height: auto">
+              <audio id="audio-player" controls style="flex-grow: 1"></audio>
+              <a
+                href=""
+                title="Baixar áudio (WAV)"
+                id="download-link"
+                style="color: var(--text-color); display: none; margin-left: 1em"
+                target="_blank"
+                noreferrer
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+              </a>
+            </div>
+            <p id="content-text" class="card" style="display: none"></p>
+          </div>
         </div>
       </div>
     </div>
 
     <script>
       const form = document.getElementById("synthesize-form");
-      const resultContainer = document.getElementById("result-container");
+      const messageContent = document.getElementById("message-content");
+      const timeTakenMessage = document.getElementById("time-taken-content");
+      const audioContent = document.getElementById("audio-content");
+      const audioPlayer = document.getElementById("audio-player");
+      const downloadLink = document.getElementById("download-link");
+      const textContent = document.getElementById("content-text");
       const submitButton = document.getElementById("submit-button");
       const themeToggle = document.getElementById("theme-toggle");
       const htmlEl = document.documentElement;
 
-      // --- Theme Switcher ---
-      function applyTheme(theme) {
-        if (theme === "light") {
-          htmlEl.setAttribute("data-theme", "light");
-          themeToggle.innerHTML = "☀️";
-        } else {
-          htmlEl.removeAttribute("data-theme");
-          themeToggle.innerHTML = "🌙";
-        }
-      }
+      // --- Web Audio (streaming) ---
+      let audioContext;
+      let mediaStreamDestination;
+      let nextStartTime = 0;
+      let activeSources = [];
+
+      audioPlayer.playbackRate = 1.25; // Velocidade padrão
 
       themeToggle.addEventListener("click", () => {
         const currentTheme = htmlEl.getAttribute("data-theme");
@@ -121,13 +129,117 @@
         applyTheme(savedTheme);
       });
 
-      // --- Form Submission ---
+      // --- Theme Switcher ---
+      const applyTheme = (theme) => {
+        if (theme === "light") {
+          htmlEl.setAttribute("data-theme", "light");
+          themeToggle.innerHTML = "☀️";
+        } else {
+          htmlEl.removeAttribute("data-theme");
+          themeToggle.innerHTML = "🌙";
+        }
+      };
+
+      // --- Web Audio (streaming) ---
+      const getAudioContext = () => {
+        if (!audioContext) {
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioContext.state === "suspended") {
+          audioContext.resume();
+        }
+        return audioContext;
+      };
+
+      const resetStreamingPlayback = () => {
+        activeSources.forEach((s) => {
+          try {
+            s.stop(0);
+          } catch (_) {}
+        });
+        activeSources = [];
+
+        const ctx = getAudioContext();
+        mediaStreamDestination = ctx.createMediaStreamDestination();
+
+        audioPlayer.srcObject = mediaStreamDestination.stream;
+        audioPlayer.src = "";
+        audioPlayer.play().catch(() => {});
+
+        nextStartTime = Math.max(ctx.currentTime + 0.05, 0);
+      };
+
+      class ScheduleChunk {
+        constructor(done) {
+          this.done = done;
+          this.audio_file = undefined;
+        }
+
+        append(float32Array, sampleRate) {
+          const ctx = getAudioContext();
+
+          const buffer = ctx.createBuffer(1, float32Array.length, sampleRate);
+          buffer.getChannelData(0).set(float32Array);
+
+          const src = ctx.createBufferSource();
+          src.buffer = buffer;
+
+          const speed = audioPlayer.playbackRate || 1;
+          src.playbackRate.value = speed;
+
+          const lookahead = 0.02; // 20ms
+          const startAt = Math.max(nextStartTime, ctx.currentTime + lookahead);
+          const actualDur = buffer.duration / speed;
+
+          const gain = ctx.createGain();
+          const fade = Math.min(0.005, Math.max(0, actualDur / 10));
+
+          gain.gain.setValueAtTime(0, startAt);
+          gain.gain.linearRampToValueAtTime(1, startAt + fade);
+          gain.gain.setValueAtTime(1, startAt + actualDur - fade);
+          gain.gain.linearRampToValueAtTime(0, startAt + actualDur);
+
+          src.connect(gain);
+          gain.connect(mediaStreamDestination);
+
+          src.start(startAt);
+          nextStartTime = startAt + actualDur;
+          activeSources.push(src);
+
+          src.onended = () => {
+            try {
+              src.disconnect();
+            } catch {}
+            try {
+              gain.disconnect();
+            } catch {}
+            activeSources = activeSources.filter((s) => s !== src);
+
+            // Trocar para o arquivo final somente quando todos os chunks acabarem
+            if (activeSources.length === 0 && this.done) {
+              audioPlayer.srcObject = null;
+              audioPlayer.src = this.audio_file;
+              audioPlayer.load();
+            }
+          };
+        }
+      }
+      const scheduleChunk = new ScheduleChunk(false);
+
+      // --- Form Submission with Streaming ---
       form.addEventListener("submit", async (event) => {
         event.preventDefault();
         submitButton.disabled = true;
         submitButton.textContent = "Processando...";
-        resultContainer.innerHTML =
-          '<p class="small">Gerando áudio, por favor aguarde...</p>';
+        messageContent.innerHTML = "Iniciando processo...";
+        timeTakenMessage.textContent = "";
+        textContent.textContent = "";
+        downloadLink.href = "";
+        audioContent.style.display = "none";
+        downloadLink.style.display = "none";
+
+        // Preparar streaming
+        resetStreamingPlayback();
 
         const formData = new FormData(form);
         const rawText = formData.get("raw_text");
@@ -139,79 +251,63 @@
             method: "POST",
             headers: {
               "Content-Type": "application/json",
+              Accept: "text/event-stream",
+              "Cache-Control": "no-cache",
             },
-            body: JSON.stringify({
-              raw_text: rawText,
-              url: url,
-              voice: voice,
-            }),
+            body: JSON.stringify({ raw_text: rawText, url, voice }),
           });
 
-          if (!response.ok) {
+          if (!response.ok || !response.body) {
             const errorData = await response.json();
             throw new Error(errorData.detail || "Ocorreu um erro no servidor.");
           }
 
-          const result = await response.json();
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder();
+          let streamBuffer = "";
 
-          if (result.audio_path) {
-            resultContainer.innerHTML = ""; // Limpa a mensagem de "processando"
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
 
-            const audioWrapper = document.createElement("div");
-            audioWrapper.style.display = "flex";
-            audioWrapper.style.alignItems = "center";
-            audioWrapper.style.gap = "1em";
-            audioWrapper.style.width = "100%";
+            streamBuffer += decoder.decode(value, { stream: true });
+            const messages = streamBuffer.split("\n\n");
+            streamBuffer = messages.pop(); // Keep incomplete message
 
-            const audio = document.createElement("audio");
-            audio.controls = true;
-            audio.autoplay = true;
-            audio.src = result.audio_path;
-            audio.style.flexGrow = "1";
+            for (const message of messages) {
+              if (!message.startsWith("data: ")) continue;
 
-            const downloadLink = document.createElement("a");
-            downloadLink.href = result.audio_path;
-            downloadLink.download = result.audio_path.split("/").pop();
-            downloadLink.title = "Baixar áudio";
-            downloadLink.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>`;
-            downloadLink.style.color = "var(--text-color)";
+              const data = JSON.parse(message.substring(6));
 
-            const speedControl = document.createElement("input");
-            speedControl.style.width = "5em";
-            speedControl.type = "range";
-            speedControl.title = "Controlar velocidade do áudio";
-            speedControl.min = "0.5";
-            speedControl.max = "2";
-            speedControl.step = "0.5";
-            speedControl.value = "1";
+              if (data.status === "started") {
+                messageContent.textContent = "Processamento iniciado...";
+                continue;
+              }
 
-            speedControl.addEventListener("input", (e) => {
-              audio.playbackRate = parseFloat(e.target.value);
-            });
+              audioContent.style.display = "block";
 
-            const message = document.createElement("p");
-            message.className = "card";
-            message.textContent = result.content;
+              if (data.status === "done") {
+                messageContent.textContent = "Áudio sintetizado com sucesso!";
+                downloadLink.href = data.audio;
+                downloadLink.style.display = "inline";
+                scheduleChunk.done = true;
+                scheduleChunk.audio_file = data.audio;
+              }
 
-            const timeTakenMessage = document.createElement("p");
-            const timeTaken = result.time_taken
-              ? `Tempo de processamento: ${result.time_taken.toFixed(
-                  2
-                )} segundos`
-              : "";
-            timeTakenMessage.textContent = timeTaken;
+              if (Array.isArray(data.audio_data)) {
+                // data.audio_data é PCM float [-1, 1]
+                const f32 = Float32Array.from(data.audio_data);
+                scheduleChunk.append(f32, data.sample_rate || 24000);
+                audioPlayer.play().catch(() => {});
+              }
 
-            resultContainer.appendChild(timeTakenMessage);
-            audioWrapper.appendChild(audio);
-            audioWrapper.appendChild(speedControl);
-            audioWrapper.appendChild(downloadLink);
-            resultContainer.appendChild(audioWrapper);
-            resultContainer.appendChild(message);
-          } else {
-            throw new Error("Resposta do servidor não continha um áudio.");
+              timeTakenMessage.textContent = `Tempo de processamento: ${data.time_taken.toFixed(2)} segundos`;
+              textContent.innerHTML = data?.content ?? "";
+              textContent.style.display = data?.content ? "block" : "none";
+            }
           }
         } catch (error) {
-          resultContainer.innerHTML = `<div class="error"><strong>Erro:</strong> ${error.message}</div>`;
+          messageContent.innerHTML = `<div class="error"><strong>Erro:</strong> ${error.message}</div>`;
         } finally {
           submitButton.disabled = false;
           submitButton.textContent = "Sintetizar";

@@ -1,5 +1,11 @@
 # Synthesize Text2Audio
 
+![alt text](image.png)
+
+## **TODO:**
+
+- Improve audio generation, right now we parse all text and generate the whole audio, which might take too long. Generate in chunks for better UX
+
 ## Install dependencies
 
 If you don't have `uv` installed, you can install it curling the following command [Installing uv](https://docs.astral.sh/uv/getting-started/installation/):
@@ -15,6 +21,12 @@ uv sync
 ```
 
 > P.S.: Take a look at the `pyproject.toml` file, in particular the [[tool.uv.index]] section, because in my machine I had to add the `pytorch-cu118` index to be able to install the `torch` package. If you have a new NVIDIA GPU, you might need to change the index URL to match your CUDA version (or remove it if you don't need it).
+
+Install `ffmpeg` if you don't have it installed yet. This is required to convert audio files to mp3 format.
+
+```bash
+sudo apt install ffmpeg
+```
 
 ## Create a .env file
 
@@ -32,7 +44,7 @@ HUGGINGFACE_MAX_LENGTH=5120
 
 ## Run the server
 
-Another way to use the application is to run it as a server. This allows you to send audio files via HTTP requests and receive transcriptions in response.
+To use the application you should run as a server.
 
 ```bash
 uv run uvicorn src.app:app --host 0.0.0.0 --port 8000 --reload

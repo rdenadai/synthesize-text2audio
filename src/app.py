@@ -1,10 +1,12 @@
-from time import perf_counter
+import asyncio
 
+import orjson
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, ORJSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from starlette.responses import StreamingResponse
 
 from src.process import text2audio_processor, text_processor
 from src.schema import InputProcessedText
@@ -34,13 +36,26 @@ def synthesize_text(request: Request, processed_text: InputProcessedText) -> ORJ
     Endpoint to synthesize text to audio.
     The processed_text should contain the raw text or URL for the audio file.
     """
-    start_time = perf_counter()
-    output_processed_text = text_processor.execute(processed_text)
-    audio_path = text2audio_processor.execute(output_processed_text)
-    return ORJSONResponse(
-        {
-            "time_taken": perf_counter() - start_time,
-            "content": output_processed_text.content,
-            "audio_path": audio_path,
-        }
+
+    async def generate_response(processed_text: InputProcessedText) -> StreamingResponse:
+        yield "data: " + orjson.dumps({"status": "started"}).decode("utf-8") + "\n\n"
+        await asyncio.sleep(0)
+
+        output_processed_text = await text_processor.execute(processed_text)
+        async for state in text2audio_processor.execute(output_processed_text):
+            response_data = {
+                "content": output_processed_text.content,
+                **dict(state),
+            }
+            yield f"data: {orjson.dumps(response_data).decode('utf-8')}\n\n"
+            await asyncio.sleep(0)
+
+    return StreamingResponse(
+        generate_response(processed_text),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # nginx: disable buffering
+        },
     )

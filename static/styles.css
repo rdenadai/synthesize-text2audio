@@ -26,8 +26,8 @@ html,
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto,
-    Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji",
+    "Segoe UI Emoji";
   margin: 0;
   padding: 0;
   transition: background-color 0.2s, color 0.2s;
@@ -93,7 +93,6 @@ form {
   gap: 1rem; /* Consistent gap between form elements */
 }
 
-/* New styles for text inputs and select */
 textarea,
 input[type="text"],
 select {
@@ -231,6 +230,11 @@ input[type="range"]:focus::-moz-range-thumb {
 .result-box ol {
   padding-left: 20px;
 }
+.primary-btn {
+  width: min(25em, 100%);
+  font-size: 1.25em;
+  color: #fff;
+}
 
 /* --- Tablet and larger screens --- */
 @media (min-width: 768px) {
@@ -261,4 +265,9 @@ input[type="range"]:focus::-moz-range-thumb {
     grid-template-columns: 1fr 1fr; /* Two columns for the results */
     gap: 24px;
   }
+}
+@media (max-width: 480px) {
+  #submit-button {
+    min-width: 16em;
+  } /* ou 100% */
 }

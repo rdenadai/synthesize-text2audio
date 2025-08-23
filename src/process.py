@@ -1,12 +1,15 @@
+import asyncio
 import os
 import re
 from datetime import datetime
+from time import perf_counter
 from uuid import uuid4
 
 import httpx
+import numpy as np
 from bs4 import BeautifulSoup
+from pydub import AudioSegment
 from readability import Document
-from scipy.io import wavfile
 
 from src.constants import OUTPUT_DIR
 from src.model import text2audio_model
@@ -14,25 +17,51 @@ from src.schema import InputProcessedText, OutputProcessedText
 
 
 class Text2AudioProcessor:
-    def execute(self, processed_text: OutputProcessedText) -> str:
+    async def execute(self, processed_text: OutputProcessedText) -> str:
         """
         Process the text or URL from the processed_text object and synthesize it to audio.
         This function should implement the actual text-to-audio synthesis logic.
         """
-        filename = f"synthesized-{uuid4().hex}-{datetime.now().strftime('%Y%m%d%H%M%S')}.wav"
+        start_time = perf_counter()
+        filename = f"synthesized-{uuid4().hex}-{datetime.now().strftime('%Y%m%d%H%M%S')}.mp3"
         file_path = os.path.join(OUTPUT_DIR, filename)
-        audio = text2audio_model.synthesize(text=processed_text.summary, voice=processed_text.voice)
-        sampling_rate = text2audio_model.get_sample_rate()
-        wavfile.write(
-            file_path,
-            rate=sampling_rate,
-            data=audio.cpu().numpy().squeeze(),
+
+        sample_rate = text2audio_model.get_sample_rate()
+
+        full_audio = []
+        for audio in text2audio_model.synthesize(text=processed_text.summary, voice=processed_text.voice):
+            audio_data = audio.cpu().numpy().tolist()
+            full_audio.append(audio_data)
+            yield {
+                "status": "processing",
+                "time_taken": perf_counter() - start_time,
+                "audio_data": audio_data,
+                "sample_rate": sample_rate,
+            }
+            await asyncio.sleep(0)
+
+        audio_array = np.concatenate(full_audio).squeeze()
+        audio_int = np.int16(audio_array * 32767)
+        audio_segment = AudioSegment(
+            audio_int.tobytes(),
+            frame_rate=sample_rate,
+            sample_width=audio_int.dtype.itemsize,
+            channels=2 if len(audio_int.shape) > 1 else 1,
         )
-        return f"/static/audio/{filename}"
+        audio_segment.export(file_path, format="mp3")
+
+        yield {
+            "status": "done",
+            "time_taken": perf_counter() - start_time,
+            "audio_data": text2audio_model.silence.cpu().numpy().tolist(),
+            "sample_rate": sample_rate,
+            "audio": f"/static/audio/{filename}",
+        }
+        await asyncio.sleep(0)
 
 
 class TextProcessor:
-    def _load_url_text(self, url: str) -> str:
+    async def _load_url_text(self, url: str) -> str:
         """
         Load text from a URL.
         This function fetches the content from the provided URL and returns it as a string.
@@ -45,7 +74,7 @@ class TextProcessor:
             response.raise_for_status()
             return response.content.decode("utf-8")
 
-    def _parse_text(self, loaded_text: str) -> InputProcessedText:
+    async def _parse_text(self, loaded_text: str) -> InputProcessedText:
         """
         Parse the loaded text and return a InputProcessedText object.
         This function can be extended to include more complex parsing logic if needed.
@@ -57,18 +86,20 @@ class TextProcessor:
             content = f"{title}: {content}"
         summary = re.sub(r'[()\[\]{}"\']+', "", content)
         summary = re.sub(r"[\'—;]+", ", ", summary)
+        summary = re.sub(r"[%]+", " porcento", summary)
         summary = re.sub(r",+", ",", summary)
+        content = re.sub(r"\.$", ".<br>", summary, flags=re.MULTILINE)
         return OutputProcessedText(summary=summary, content=content)
 
-    def execute(self, processed_text: InputProcessedText) -> OutputProcessedText:
+    async def execute(self, processed_text: InputProcessedText) -> OutputProcessedText:
         """
         Process the text or URL from the processed_text object and return a OutputProcessedText object.
         This function should implement the actual text processing logic.
         """
         raw_text = processed_text.raw_text.strip()
         if processed_text.url:
-            raw_text = self._load_url_text(processed_text.url)
-        output_processed_text = self._parse_text(raw_text)
+            raw_text = await self._load_url_text(processed_text.url)
+        output_processed_text = await self._parse_text(raw_text)
         output_processed_text.voice = processed_text.voice or output_processed_text.voice
         return output_processed_text
 
