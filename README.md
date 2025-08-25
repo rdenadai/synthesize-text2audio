@@ -2,10 +2,6 @@
 
 ![alt text](image.png)
 
-## **TODO:**
-
-- Improve audio generation, right now we parse all text and generate the whole audio, which might take too long. Generate in chunks for better UX
-
 ## Install dependencies
 
 If you don't have `uv` installed, you can install it curling the following command [Installing uv](https://docs.astral.sh/uv/getting-started/installation/):
