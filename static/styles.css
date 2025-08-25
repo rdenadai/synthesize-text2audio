@@ -161,6 +161,7 @@ button {
 .danger {
   background: var(--danger);
   color: #fff;
+  padding: 5px;
 }
 /* --- Range Slider --- */
 input[type="range"] {

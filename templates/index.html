@@ -11,8 +11,11 @@
     <div class="container">
       <div class="card">
         <div class="row">
-          <h1>Sintetizador de Texto para Áudio</h1>
-          <button id="theme-toggle" class="theme-toggle" title="Mudar tema">🌙</button>
+          <div style="display: flex; align-items: center; gap: 1rem; flex-grow: 1; margin-bottom: 1em">
+            <img src="/static/logo.png" alt="Logo" width="64" height="64" />
+            <h1>Sintetizador de Texto para Áudio</h1>
+          </div>
+          <button id="theme-toggle" class="theme-toggle" title="Mudar tema">☀️</button>
         </div>
         <p class="muted">Cole um texto, insira uma URL ou escolha uma voz para gerar o áudio.</p>
         <form id="synthesize-form">
@@ -117,6 +120,11 @@
 
       audioPlayer.playbackRate = 1.25; // Velocidade padrão
 
+      document.addEventListener("DOMContentLoaded", () => {
+        const savedTheme = localStorage.getItem("theme") || "dark";
+        applyTheme(savedTheme);
+      });
+
       themeToggle.addEventListener("click", () => {
         const currentTheme = htmlEl.getAttribute("data-theme");
         const newTheme = currentTheme === "light" ? "dark" : "light";
@@ -124,19 +132,13 @@
         applyTheme(newTheme);
       });
 
-      document.addEventListener("DOMContentLoaded", () => {
-        const savedTheme = localStorage.getItem("theme") || "dark";
-        applyTheme(savedTheme);
-      });
-
-      // --- Theme Switcher ---
       const applyTheme = (theme) => {
         if (theme === "light") {
           htmlEl.setAttribute("data-theme", "light");
-          themeToggle.innerHTML = "☀️";
+          themeToggle.innerHTML = "🌙";
         } else {
           htmlEl.removeAttribute("data-theme");
-          themeToggle.innerHTML = "🌙";
+          themeToggle.innerHTML = "☀️";
         }
       };
 
@@ -307,7 +309,7 @@
             }
           }
         } catch (error) {
-          messageContent.innerHTML = `<div class="error"><strong>Erro:</strong> ${error.message}</div>`;
+          messageContent.innerHTML = `<div class="danger"><strong>Erro:</strong> ${error.message}</div>`;
         } finally {
           submitButton.disabled = false;
           submitButton.textContent = "Sintetizar";

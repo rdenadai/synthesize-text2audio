@@ -18,6 +18,13 @@ uv sync
 
 > P.S.: Take a look at the `pyproject.toml` file, in particular the [[tool.uv.index]] section, because in my machine I had to add the `pytorch-cu118` index to be able to install the `torch` package. If you have a new NVIDIA GPU, you might need to change the index URL to match your CUDA version (or remove it if you don't need it).
 
+As a dependency we use nltk to parse and generate text tokens... For this matter install `punkt`:
+
+```bash
+uv run python -m nltk.downloader punkt
+uv run python -m nltk.downloader punkt_tab
+```
+
 Install `ffmpeg` if you don't have it installed yet. This is required to convert audio files to mp3 format.
 
 ```bash
